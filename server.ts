@@ -204,6 +204,7 @@ async function startWhatsAppBot(clinicId: string, host: string, pairingPhone?: s
 
       // Update Inbox Session
       const phone = remoteJid.split('@')[0];
+      const pushName = msg.pushName || phone;
       
       if (!inboxSessions.has(clinicId)) {
         inboxSessions.set(clinicId, new Map());
@@ -215,6 +216,7 @@ async function startWhatsAppBot(clinicId: string, host: string, pairingPhone?: s
         clinicInbox.set(phone, {
           id: phone,
           phone: phone,
+          name: pushName,
           aiEnabled: true,
           lastMessage: textMessage.substring(0, 2000),
           lastMessageAt: Date.now(),
@@ -224,6 +226,7 @@ async function startWhatsAppBot(clinicId: string, host: string, pairingPhone?: s
       } else {
         const session = clinicInbox.get(phone)!;
         aiEnabled = session.aiEnabled !== false;
+        session.name = pushName;
         session.lastMessage = textMessage.substring(0, 2000);
         session.lastMessageAt = Date.now();
         session.updatedAt = Date.now();

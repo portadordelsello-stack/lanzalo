@@ -1132,7 +1132,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                      <table className="w-full text-left border-collapse">
                         <thead>
                            <tr className="bg-slate-50/50 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                              <th className="px-6 py-4 border-b border-slate-100">Teléfono</th>
+                              <th className="px-6 py-4 border-b border-slate-100">Usuario</th>
                               <th className="px-6 py-4 border-b border-slate-100">Último Mensaje</th>
                               <th className="px-6 py-4 border-b border-slate-100">Fecha</th>
                               <th className="px-6 py-4 border-b border-slate-100 text-center">IA Activada</th>
@@ -1141,7 +1141,10 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                         <tbody className="text-sm text-slate-600">
                            {inboxSessions.map(session => (
                               <tr key={session.id} className="hover:bg-slate-50 border-b border-slate-100 transition-colors">
-                                 <td className="px-6 py-4 font-medium text-slate-900">{session.phone}</td>
+                                 <td className="px-6 py-4">
+                                     <div className="font-medium text-slate-900">{session.name || session.phone}</div>
+                                     <div className="text-xs text-slate-500">+{session.phone}</div>
+                                 </td>
                                  <td className="px-6 py-4 max-w-[200px] truncate text-slate-500" title={session.lastMessage}>
                                    {session.lastMessage}
                                  </td>

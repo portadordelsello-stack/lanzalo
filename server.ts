@@ -116,6 +116,7 @@ const waQRCodes = new Map<string, string>();
 const waPairingCodes = new Map<string, string>();
 const waStatus = new Map<string, string>();
 const waConfigs = new Map<string, AppConfig>();
+const chatHistories = new Map<string, any[]>();
 
 async function startWhatsAppBot(clinicId: string, host: string, pairingPhone?: string) {
   const authFolder = path.join(process.cwd(), 'wa_clients', clinicId);
@@ -238,9 +239,21 @@ async function startWhatsAppBot(clinicId: string, host: string, pairingPhone?: s
             tools: [{ functionDeclarations: [consultarSuscripcion] }]
           };
 
+          const historyKey = `${clinicId}:${remoteJid}`;
+          if (!chatHistories.has(historyKey)) {
+             chatHistories.set(historyKey, []);
+          }
+          const history = chatHistories.get(historyKey)!;
+          history.push({ role: 'user', parts: [{ text: textMessage }] });
+          
+          // Keep last 20 messages to prevent context overflow
+          if (history.length > 20) {
+             history.splice(0, history.length - 20);
+          }
+
           const response1 = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
-            contents: `Mensaje del usuario: "${textMessage}"`,
+            contents: history,
             config: generationConfig
           });
 
@@ -266,22 +279,23 @@ async function startWhatsAppBot(clinicId: string, host: string, pairingPhone?: s
 
               const previousContent = response1.candidates?.[0]?.content;
               if (previousContent) {
+                history.push(previousContent);
+                history.push({ role: 'user', parts: [{ functionResponse: { name: 'consultarSuscripcion', response: { result: toolResultStr } } }] });
+
                 const response2 = await ai.models.generateContent({
                   model: 'gemini-2.5-flash',
-                  contents: [
-                    { role: 'user', parts: [{ text: `Mensaje del usuario: "${textMessage}"` }] },
-                    previousContent,
-                    { role: 'user', parts: [{ functionResponse: { name: 'consultarSuscripcion', response: { result: toolResultStr } } }] }
-                  ],
+                  contents: history,
                   config: generationConfig
                 });
                 replyText = response2.text || 'No pude encontrar la información, disculpa las molestias.';
+                history.push({ role: 'model', parts: [{ text: replyText }] });
               } else {
                 replyText = 'Error en el flujo de la consulta. Por favor, intenta de nuevo.';
               }
             }
           } else {
             replyText = response1.text || 'Error generando respuesta.';
+            history.push({ role: 'model', parts: [{ text: replyText }] });
           }
 
           await sock.sendPresenceUpdate('paused', remoteJid);

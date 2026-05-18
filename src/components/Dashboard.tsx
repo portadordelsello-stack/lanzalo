@@ -177,6 +177,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
   }, [supportMessages, activeTab]);
   const [patients, setPatients] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
+  const [inboxSessions, setInboxSessions] = useState<any[]>([]);
   const [systemPrompt, setSystemPrompt] = useState<string>('');
   const [savingSettings, setSavingSettings] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -184,6 +185,28 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
   const [profileForm, setProfileForm] = useState({ name: '', specialty: '', whatsappNumber: '', contactEmail: '' });
   const [isEditingAppearance, setIsEditingAppearance] = useState(false);
   const [appearanceForm, setAppearanceForm] = useState({ coverUrl: '', logoUrl: '', theme: 'default' });
+
+  // Sync Inbox Sessions
+  useEffect(() => {
+    let unsubscribe: () => void = () => {};
+    try {
+      unsubscribe = onSnapshot(
+        collection(db, 'clinics', user.uid, 'inbox'),
+        (snapshot) => {
+          const list: any[] = [];
+          snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+          list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+          setInboxSessions(list);
+        },
+        (error) => {
+          console.error("Inbox snapshot error:", error);
+        }
+      );
+    } catch (err) {
+      console.error("Failed to setup inbox listener:", err);
+    }
+    return () => unsubscribe();
+  }, [user.uid]);
 
   // Sync Patients
   useEffect(() => {
@@ -211,6 +234,17 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
     return unsubscribe;
   }, [user.uid]);
 
+  const toggleAi = async (sessionId: string, currentStatus: boolean) => {
+    try {
+      await updateDoc(doc(db, 'clinics', user.uid, 'inbox', sessionId), {
+        aiEnabled: !currentStatus,
+        updatedAt: Date.now()
+      });
+    } catch (err) {
+      console.error('Error toggling AI:', err);
+      alert('Error cambiando estado de IA');
+    }
+  };
 
   // Admin Config
   const isAdmin = user.email === 'portadordelsello@gmail.com';
@@ -995,6 +1029,14 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
           </button>
           
           <button 
+            onClick={() => { setActiveTab('inbox'); setIsSidebarOpen(false); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold transition-all ${activeTab === 'inbox' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+          >
+            <MessageCircle className="w-5 h-5" />
+            Inbox AI
+          </button>
+
+          <button 
             onClick={() => { setActiveTab('flujos'); setIsSidebarOpen(false); }}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold transition-all ${activeTab === 'flujos' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
           >
@@ -1065,6 +1107,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                  {activeTab === 'articulos' && 'Catálogo'}
                  {activeTab === 'lanzamientos' && 'Lanzamientos'}
                  {activeTab === 'suscriptores' && 'Suscriptores'}
+                 {activeTab === 'inbox' && 'Inbox AI'}
                  {activeTab === 'flujos' && 'Flujos AI'}
                  {activeTab === 'configuracion' && 'WhatsApp'}
                  {activeTab === 'perfil' && 'Perfil'}
@@ -1088,6 +1131,60 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
 
           {/* TAB: LANZAMIENTOS */}
           {activeTab === 'lanzamientos' && <LaunchesTab clinicId={clinic?.id} />}
+
+          {/* TAB: INBOX AI */}
+          {activeTab === 'inbox' && (
+            <div className="max-w-6xl mx-auto space-y-8">
+               <div className="bg-white border border-slate-100 rounded-[2rem] shadow-xl shadow-slate-200/40 overflow-hidden">
+                  <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+                     <div>
+                        <h3 className="font-bold text-slate-900">Clientes Potenciales / Inbox</h3>
+                        <p className="text-sm text-slate-500">Usuarios que interactuaron con tu IA. Desactiva la IA si quieres tomar el control manual por WhatsApp.</p>
+                     </div>
+                  </div>
+                  <div className="overflow-x-auto">
+                     <table className="w-full text-left border-collapse">
+                        <thead>
+                           <tr className="bg-slate-50/50 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                              <th className="px-6 py-4 border-b border-slate-100">Teléfono</th>
+                              <th className="px-6 py-4 border-b border-slate-100">Último Mensaje</th>
+                              <th className="px-6 py-4 border-b border-slate-100">Fecha</th>
+                              <th className="px-6 py-4 border-b border-slate-100 text-center">IA Activada</th>
+                           </tr>
+                        </thead>
+                        <tbody className="text-sm text-slate-600">
+                           {inboxSessions.map(session => (
+                              <tr key={session.id} className="hover:bg-slate-50 border-b border-slate-100 transition-colors">
+                                 <td className="px-6 py-4 font-medium text-slate-900">{session.phone}</td>
+                                 <td className="px-6 py-4 max-w-[200px] truncate text-slate-500" title={session.lastMessage}>
+                                   {session.lastMessage}
+                                 </td>
+                                 <td className="px-6 py-4 text-slate-500">
+                                   {new Date(session.updatedAt || session.createdAt).toLocaleString()}
+                                 </td>
+                                 <td className="px-6 py-4 text-center">
+                                    <button 
+                                      onClick={() => toggleAi(session.id, session.aiEnabled)}
+                                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${session.aiEnabled ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                                    >
+                                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${session.aiEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                                    </button>
+                                 </td>
+                              </tr>
+                           ))}
+                           {inboxSessions.length === 0 && (
+                              <tr>
+                                <td colSpan={4} className="px-6 py-12 text-center text-slate-400">
+                                  No hay conversaciones recientes en el Inbox AI.
+                                </td>
+                              </tr>
+                           )}
+                        </tbody>
+                     </table>
+                  </div>
+               </div>
+            </div>
+          )}
 
           {/* TAB: PACIENTES */}
           {activeTab === 'suscriptores' && (

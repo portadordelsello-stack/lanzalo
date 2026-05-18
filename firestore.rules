@@ -197,6 +197,15 @@ service cloud.firestore {
          allow delete: if false;
       }
 
+      match /inbox/{sessionId} {
+         allow get: if isSignedIn() && isValidId(sessionId) && clinicId == request.auth.uid;
+         allow list: if isSignedIn() && clinicId == request.auth.uid;
+         allow create: if false; // Only server creates
+         allow update: if isSignedIn() && clinicId == request.auth.uid &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['aiEnabled', 'updatedAt']);
+         allow delete: if isSignedIn() && clinicId == request.auth.uid;
+      }
+
       match /launches/{launchId} {
          allow get: if isSignedIn() && isValidId(launchId) && clinicId == request.auth.uid;
          allow list: if isSignedIn() && clinicId == request.auth.uid;

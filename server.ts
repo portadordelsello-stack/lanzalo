@@ -201,6 +201,41 @@ async function startWhatsAppBot(clinicId: string, host: string, pairingPhone?: s
       const clinicConfig = waConfigs.get(clinicId);
       if (!clinicConfig || !clinicConfig.botActive) continue;
 
+      // Update Inbox Session
+      const phone = remoteJid.split('@')[0];
+      let aiEnabled = true;
+
+      try {
+        const inboxRef = getDb().collection('clinics').doc(clinicId).collection('inbox').doc(phone);
+        const inboxDoc = await inboxRef.get();
+        if (!inboxDoc.exists) {
+           await inboxRef.set({
+             storeOwnerId: clinicId,
+             phone: phone,
+             aiEnabled: true,
+             lastMessage: textMessage.substring(0, 2000),
+             lastMessageAt: Date.now(),
+             createdAt: Date.now(),
+             updatedAt: Date.now()
+           });
+        } else {
+           const data = inboxDoc.data();
+           aiEnabled = data?.aiEnabled !== false;
+           
+           await inboxRef.update({
+             lastMessage: textMessage.substring(0, 2000),
+             lastMessageAt: Date.now(),
+             updatedAt: Date.now()
+           });
+        }
+      } catch (err) {
+        console.error("Error updating inbox session:", err);
+      }
+
+      if (!aiEnabled) {
+          continue; // Human took over, AI ignores message
+      }
+
       const systemConfig = getSystemConfig();
       const plan = clinicConfig.plan || 'GRATIS';
       const limit = systemConfig.limits[plan as keyof typeof systemConfig.limits] || 0;

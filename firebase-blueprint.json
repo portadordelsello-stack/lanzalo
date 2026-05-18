@@ -85,6 +85,21 @@
         "timestamp": { "type": "number" }
       },
       "required": ["storeOwnerId", "subscriberId", "direction", "text", "createdAt", "timestamp"]
+    },
+    "InboxSession": {
+      "title": "InboxSession",
+      "description": "Conversation tracking for Inbox AI",
+      "type": "object",
+      "properties": {
+        "storeOwnerId": { "type": "string", "maxLength": 128 },
+        "phone": { "type": "string", "maxLength": 20 },
+        "aiEnabled": { "type": "boolean" },
+        "lastMessage": { "type": "string", "maxLength": 2000 },
+        "lastMessageAt": { "type": "number" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["storeOwnerId", "phone", "aiEnabled", "lastMessage", "lastMessageAt", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
@@ -107,6 +122,10 @@
     "/clinics/{storeId}/messages/{messageId}": {
       "schema": { "$ref": "#/entities/Message" },
       "description": "Message logs"
+    },
+    "/clinics/{storeId}/inbox/{sessionId}": {
+      "schema": { "$ref": "#/entities/InboxSession" },
+      "description": "Inbox AI active sessions"
     }
   }
 }

@@ -186,28 +186,6 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
   const [isEditingAppearance, setIsEditingAppearance] = useState(false);
   const [appearanceForm, setAppearanceForm] = useState({ coverUrl: '', logoUrl: '', theme: 'default' });
 
-  // Sync Inbox Sessions
-  useEffect(() => {
-    let unsubscribe: () => void = () => {};
-    try {
-      unsubscribe = onSnapshot(
-        collection(db, 'clinics', user.uid, 'inbox'),
-        (snapshot) => {
-          const list: any[] = [];
-          snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
-          list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-          setInboxSessions(list);
-        },
-        (error) => {
-          console.error("Inbox snapshot error:", error);
-        }
-      );
-    } catch (err) {
-      console.error("Failed to setup inbox listener:", err);
-    }
-    return () => unsubscribe();
-  }, [user.uid]);
-
   // Sync Patients
   useEffect(() => {
     const unsubscribe = onSnapshot(
@@ -236,12 +214,17 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
 
   const toggleAi = async (sessionId: string, currentStatus: boolean) => {
     try {
-      await updateDoc(doc(db, 'clinics', user.uid, 'inbox', sessionId), {
-        aiEnabled: !currentStatus,
-        updatedAt: Date.now()
+      // Optimistic update
+      setInboxSessions(prev => prev.map(s => s.id === sessionId ? { ...s, aiEnabled: !currentStatus } : s));
+      await fetch(`/api/whatsapp/inbox/${user.uid}/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, aiEnabled: !currentStatus })
       });
     } catch (err) {
       console.error('Error toggling AI:', err);
+      // Revert on error
+      setInboxSessions(prev => prev.map(s => s.id === sessionId ? { ...s, aiEnabled: currentStatus } : s));
       alert('Error cambiando estado de IA');
     }
   };
@@ -728,6 +711,9 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
           setWaStatus(data.status);
           setQrCode(data.qr);
           setPairingCode(data.pairingCode);
+          if (data.inbox) {
+             setInboxSessions(data.inbox);
+          }
           if (data.messagesUsed != null && clinic && data.messagesUsed > (clinic.messagesUsed || 0)) {
              let updates: any = { messagesUsed: data.messagesUsed, updatedAt: serverTimestamp() };
              // If limit reached, automatically deactivate bot

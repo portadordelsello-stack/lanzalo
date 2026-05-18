@@ -117,6 +117,7 @@ const waPairingCodes = new Map<string, string>();
 const waStatus = new Map<string, string>();
 const waConfigs = new Map<string, AppConfig>();
 const chatHistories = new Map<string, any[]>();
+const inboxSessions = new Map<string, Map<string, any>>();
 
 async function startWhatsAppBot(clinicId: string, host: string, pairingPhone?: string) {
   const authFolder = path.join(process.cwd(), 'wa_clients', clinicId);
@@ -203,33 +204,29 @@ async function startWhatsAppBot(clinicId: string, host: string, pairingPhone?: s
 
       // Update Inbox Session
       const phone = remoteJid.split('@')[0];
+      
+      if (!inboxSessions.has(clinicId)) {
+        inboxSessions.set(clinicId, new Map());
+      }
+      const clinicInbox = inboxSessions.get(clinicId)!;
+      
       let aiEnabled = true;
-
-      try {
-        const inboxRef = getDb().collection('clinics').doc(clinicId).collection('inbox').doc(phone);
-        const inboxDoc = await inboxRef.get();
-        if (!inboxDoc.exists) {
-           await inboxRef.set({
-             storeOwnerId: clinicId,
-             phone: phone,
-             aiEnabled: true,
-             lastMessage: textMessage.substring(0, 2000),
-             lastMessageAt: Date.now(),
-             createdAt: Date.now(),
-             updatedAt: Date.now()
-           });
-        } else {
-           const data = inboxDoc.data();
-           aiEnabled = data?.aiEnabled !== false;
-           
-           await inboxRef.update({
-             lastMessage: textMessage.substring(0, 2000),
-             lastMessageAt: Date.now(),
-             updatedAt: Date.now()
-           });
-        }
-      } catch (err) {
-        console.error("Error updating inbox session:", err);
+      if (!clinicInbox.has(phone)) {
+        clinicInbox.set(phone, {
+          id: phone,
+          phone: phone,
+          aiEnabled: true,
+          lastMessage: textMessage.substring(0, 2000),
+          lastMessageAt: Date.now(),
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        });
+      } else {
+        const session = clinicInbox.get(phone)!;
+        aiEnabled = session.aiEnabled !== false;
+        session.lastMessage = textMessage.substring(0, 2000);
+        session.lastMessageAt = Date.now();
+        session.updatedAt = Date.now();
       }
 
       if (!aiEnabled) {
@@ -301,14 +298,19 @@ async function startWhatsAppBot(clinicId: string, host: string, pairingPhone?: s
               let toolResultStr = "Error al consultar la base de datos.";
               
               if (typeof phoneArg === 'string') {
-                const patientsRef = getDb().collection('clinics').doc(clinicId).collection('patients');
-                const patientSnap = await patientsRef.where('phone', '==', phoneArg).limit(1).get();
-                
-                if (patientSnap.empty) {
-                  toolResultStr = `Base de datos: El usuario con teléfono ${phoneArg} NO está en el sistema. Debe registrarse en el portal.`;
-                } else {
-                  const patientData = patientSnap.docs[0].data();
-                  toolResultStr = `Base de datos: El usuario ${patientData.name || 'registrado'} YA está registrado. Etiquetas/Intereses: ${(patientData.tags || []).join(', ') || 'Ninguna'}`;
+                try {
+                  const patientsRef = getDb().collection('clinics').doc(clinicId).collection('patients');
+                  const patientSnap = await patientsRef.where('phone', '==', phoneArg).limit(1).get();
+                  
+                  if (patientSnap.empty) {
+                    toolResultStr = `Base de datos: El usuario con teléfono ${phoneArg} NO está en el sistema. Debe registrarse en el portal.`;
+                  } else {
+                    const patientData = patientSnap.docs[0].data();
+                    toolResultStr = `Base de datos: El usuario ${patientData.name || 'registrado'} YA está registrado. Etiquetas/Intereses: ${(patientData.tags || []).join(', ') || 'Ninguna'}`;
+                  }
+                } catch (e) {
+                  console.error("Patient DB error:", e);
+                  // Silently return error to AI without crashing response
                 }
               }
 
@@ -335,13 +337,6 @@ async function startWhatsAppBot(clinicId: string, host: string, pairingPhone?: s
 
           await sock.sendPresenceUpdate('paused', remoteJid);
           await sock.sendMessage(remoteJid, { text: replyText });
-          
-          // Increment messagesUsed in DB
-          const clinicRef = getDb().collection('clinics').doc(clinicId);
-          await clinicRef.update({ 
-            messagesUsed: FieldValue.increment(1),
-            updatedAt: FieldValue.serverTimestamp() 
-          });
 
           clinicConfig.messagesUsed += 1;
           waConfigs.set(clinicId, clinicConfig);
@@ -418,7 +413,25 @@ app.get('/api/whatsapp/status/:clinicId', (req, res) => {
   const clinicConfig = waConfigs.get(clinicId);
   const messagesUsed = clinicConfig ? clinicConfig.messagesUsed : null;
   
-  res.json({ status, qr, pairingCode, messagesUsed });
+  const clinicInbox = inboxSessions.get(clinicId);
+  const inbox = clinicInbox ? Array.from(clinicInbox.values()).sort((a, b) => b.updatedAt - a.updatedAt) : [];
+
+  res.json({ status, qr, pairingCode, messagesUsed, inbox });
+});
+
+app.post('/api/whatsapp/inbox/:clinicId/toggle', (req, res) => {
+  const { clinicId } = req.params;
+  const { sessionId, aiEnabled } = req.body;
+  if (!inboxSessions.has(clinicId)) {
+    return res.json({ success: false });
+  }
+  const clinicInbox = inboxSessions.get(clinicId)!;
+  if (clinicInbox.has(sessionId)) {
+    const session = clinicInbox.get(sessionId)!;
+    session.aiEnabled = !!aiEnabled;
+    session.updatedAt = Date.now();
+  }
+  res.json({ success: true });
 });
 
 app.post('/api/whatsapp/send-reminders', async (req, res) => {

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Calendar } from 'lucide-react';
+import { Rocket } from 'lucide-react';
 
 export default function PrivacyPolicy() {
   return (
@@ -7,8 +7,10 @@ export default function PrivacyPolicy() {
       <header className="bg-white border-b border-slate-200 py-4 px-6 fixed top-0 w-full z-10">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <img src="/turnely.jpg" alt="Turnely AI" className="w-8 h-8 rounded-lg object-cover shadow-sm" />
-            <span className="text-xl font-bold text-slate-800 tracking-tight">Turnely</span>
+            <div className="bg-indigo-600 p-2 rounded-xl text-white">
+              <Rocket className="w-5 h-5" />
+            </div>
+            <span className="text-xl font-bold text-slate-800 tracking-tight">Lanzalo</span>
           </Link>
         </div>
       </header>
@@ -53,11 +55,13 @@ export default function PrivacyPolicy() {
       <footer className="bg-slate-900 text-slate-400 py-12 px-6 lg:px-12 mt-auto">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-2">
-            <img src="/turnely.jpg" alt="Turnely AI" className="w-8 h-8 rounded-lg object-cover shadow-sm" />
-            <span className="text-xl font-bold tracking-tight text-white">Turnely</span>
+            <div className="bg-indigo-600 p-1.5 rounded-lg text-white">
+              <Rocket className="w-5 h-5" />
+            </div>
+            <span className="text-xl font-bold tracking-tight text-white">Lanzalo</span>
           </div>
           <div className="text-sm">
-            &copy; {new Date().getFullYear()} Turnely Inc. Todos los derechos reservados.
+            &copy; {new Date().getFullYear()} Lanzalo. Todos los derechos reservados.
           </div>
           <div className="flex gap-4 text-sm">
             <Link to="/privacidad" className="hover:text-white transition-colors">Privacidad</Link>

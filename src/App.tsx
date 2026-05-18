@@ -430,7 +430,7 @@ function MainApp() {
                        <li className="flex items-center gap-2 text-sm text-slate-300"><ShieldCheck className="w-4 h-4 text-sky-400" /> Instrucciones personalizadas de IA</li>
                        <li className="flex items-center gap-2 text-sm text-slate-300"><ShieldCheck className="w-4 h-4 text-sky-400" /> {systemLimits.BASICO} mensajes límite mensuales</li>
                     </ul>
-                    <button onClick={() => { localStorage.setItem('turnely_selected_plan', 'BASICO'); setShowLoginModal(true); }} className="w-full py-3 px-4 rounded-xl bg-sky-500 text-white font-semibold hover:bg-sky-400 transition-colors">Empezar Básico</button>
+                    <button onClick={() => { localStorage.setItem('lanzalo_selected_plan', 'BASICO'); setShowLoginModal(true); }} className="w-full py-3 px-4 rounded-xl bg-sky-500 text-white font-semibold hover:bg-sky-400 transition-colors">Empezar Básico</button>
                  </div>
 
                  <div className="bg-white border border-slate-200 p-8 rounded-3xl transition-transform hover:-translate-y-1 shadow-sm flex flex-col text-left">
@@ -443,7 +443,7 @@ function MainApp() {
                        <li className="flex items-center gap-2 text-sm text-slate-600"><ShieldCheck className="w-4 h-4 text-emerald-500" /> {systemLimits.PREMIUM} mensajes límite mensuales</li>
                        <li className="flex items-center gap-2 text-sm text-slate-600"><ShieldCheck className="w-4 h-4 text-emerald-500" /> Soporte prioritario 24/7</li>
                     </ul>
-                    <button onClick={() => { localStorage.setItem('turnely_selected_plan', 'PREMIUM'); setShowLoginModal(true); }} className="w-full py-3 px-4 rounded-xl border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50 transition-colors">Elegir Premium</button>
+                    <button onClick={() => { localStorage.setItem('lanzalo_selected_plan', 'PREMIUM'); setShowLoginModal(true); }} className="w-full py-3 px-4 rounded-xl border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50 transition-colors">Elegir Premium</button>
                  </div>
               </div>
            </div>

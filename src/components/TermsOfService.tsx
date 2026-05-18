@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Calendar } from 'lucide-react';
+import { Rocket } from 'lucide-react';
 
 export default function TermsOfService() {
   return (
@@ -7,8 +7,10 @@ export default function TermsOfService() {
       <header className="bg-white border-b border-slate-200 py-4 px-6 fixed top-0 w-full z-10">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <img src="/turnely.jpg" alt="Turnely AI" className="w-8 h-8 rounded-lg object-cover shadow-sm" />
-            <span className="text-xl font-bold text-slate-800 tracking-tight">Turnely</span>
+            <div className="bg-indigo-600 p-2 rounded-xl text-white">
+              <Rocket className="w-5 h-5" />
+            </div>
+            <span className="text-xl font-bold text-slate-800 tracking-tight">Lanzalo</span>
           </Link>
         </div>
       </header>
@@ -21,7 +23,7 @@ export default function TermsOfService() {
           
           <h2 className="text-2xl font-bold text-slate-800 mt-10 mb-4">1. Aceptación de los términos</h2>
           <p className="mb-4">
-            Al acceder y utilizar los servicios de Turnely, usted acepta estar sujeto a estos Términos de Servicio. 
+            Al acceder y utilizar los servicios de Lanzalo, usted acepta estar sujeto a estos Términos de Servicio. 
             Si no está de acuerdo con alguna parte de los términos, no podrá acceder al servicio.
           </p>
 
@@ -39,13 +41,13 @@ export default function TermsOfService() {
 
           <h2 className="text-2xl font-bold text-slate-800 mt-10 mb-4">4. Propiedad intelectual</h2>
           <p className="mb-4">
-            El servicio y su contenido original, características y funcionalidad son y seguirán siendo propiedad exclusiva de Turnely y sus licenciantes. 
+            El servicio y su contenido original, características y funcionalidad son y seguirán siendo propiedad exclusiva de Lanzalo y sus licenciantes. 
             El servicio está protegido por derechos de autor, marcas comerciales y otras leyes.
           </p>
 
           <h2 className="text-2xl font-bold text-slate-800 mt-10 mb-4">5. Limitación de responsabilidad</h2>
           <p className="mb-4">
-            En ningún caso Turnely, ni sus directores, empleados, socios, agentes, proveedores o afiliados, serán responsables de los daños indirectos, incidentales, especiales, consecuentes o punitivos, o de cualquier pérdida de beneficios o ingresos.
+            En ningún caso Lanzalo, ni sus directores, empleados, socios, agentes, proveedores o afiliados, serán responsables de los daños indirectos, incidentales, especiales, consecuentes o punitivos, o de cualquier pérdida de beneficios o ingresos.
           </p>
 
           <h2 className="text-2xl font-bold text-slate-800 mt-10 mb-4">6. Modificaciones de los términos</h2>
@@ -59,11 +61,13 @@ export default function TermsOfService() {
       <footer className="bg-slate-900 text-slate-400 py-12 px-6 lg:px-12 mt-auto">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-2">
-            <img src="/turnely.jpg" alt="Turnely AI" className="w-8 h-8 rounded-lg object-cover shadow-sm" />
-            <span className="text-xl font-bold tracking-tight text-white">Turnely</span>
+            <div className="bg-indigo-600 p-1.5 rounded-lg text-white">
+              <Rocket className="w-5 h-5" />
+            </div>
+            <span className="text-xl font-bold tracking-tight text-white">Lanzalo</span>
           </div>
           <div className="text-sm">
-            &copy; {new Date().getFullYear()} Turnely Inc. Todos los derechos reservados.
+            &copy; {new Date().getFullYear()} Lanzalo. Todos los derechos reservados.
           </div>
           <div className="flex gap-4 text-sm">
             <Link to="/privacidad" className="hover:text-white transition-colors">Privacidad</Link>

@@ -65,13 +65,13 @@ service cloud.firestore {
     
     function isValidArticle(data) {
       return data.keys().hasAll(['storeOwnerId', 'name', 'description', 'price', 'imageUrl', 'tags', 'createdAt', 'updatedAt']) &&
-             data.keys().size() == 8 &&
              data.storeOwnerId is string && data.storeOwnerId.size() <= 128 && data.storeOwnerId == request.auth.uid &&
              data.name is string && data.name.size() <= 100 &&
              data.description is string && data.description.size() <= 1000 &&
              data.price is number &&
              data.imageUrl is string && data.imageUrl.size() <= 1000 &&
              data.tags is list && data.tags.size() <= 20 &&
+             (!('articleType' in data) || (data.articleType is string && data.articleType in ['physical', 'service', 'digital', 'course', 'subscription'])) &&
              data.createdAt is timestamp &&
              data.updatedAt is timestamp;
     }
@@ -178,7 +178,7 @@ service cloud.firestore {
                           incoming().storeOwnerId == existing().storeOwnerId &&
                           incoming().createdAt == existing().createdAt &&
                           incoming().updatedAt == request.time &&
-                          incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt', 'name', 'description', 'price', 'imageUrl', 'tags']);
+                          incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt', 'name', 'description', 'price', 'imageUrl', 'tags', 'articleType']);
                           
          allow delete: if isSignedIn() && isValidId(articleId) && clinicId == request.auth.uid;
       }

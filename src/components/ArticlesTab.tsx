@@ -8,7 +8,7 @@ export default function ArticlesTab({ clinicId }) {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState({ name: '', description: '', price: '', tags: '', imageUrl: '' });
+  const [form, setForm] = useState({ name: '', description: '', price: '', tags: '', imageUrl: '', articleType: 'physical' });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -25,7 +25,7 @@ export default function ArticlesTab({ clinicId }) {
 
   const openNewModal = () => {
     setEditingId(null);
-    setForm({ name: '', description: '', price: '', tags: '', imageUrl: '' });
+    setForm({ name: '', description: '', price: '', tags: '', imageUrl: '', articleType: 'physical' });
     setShowModal(true);
   };
 
@@ -36,7 +36,8 @@ export default function ArticlesTab({ clinicId }) {
       description: article.description || '',
       price: article.price?.toString() || '',
       tags: article.tags?.join(', ') || '',
-      imageUrl: article.imageUrl || ''
+      imageUrl: article.imageUrl || '',
+      articleType: article.articleType || 'physical'
     });
     setShowModal(true);
   };
@@ -56,6 +57,7 @@ export default function ArticlesTab({ clinicId }) {
           description: form.description.trim(),
           price: form.price ? Number(form.price) : 0,
           imageUrl: form.imageUrl.trim(),
+          articleType: form.articleType,
           tags: tagsArray,
           updatedAt: serverTimestamp()
         });
@@ -66,6 +68,7 @@ export default function ArticlesTab({ clinicId }) {
           description: form.description.trim(),
           price: form.price ? Number(form.price) : 0,
           imageUrl: form.imageUrl.trim(),
+          articleType: form.articleType,
           tags: tagsArray,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
@@ -73,7 +76,7 @@ export default function ArticlesTab({ clinicId }) {
       }
       setShowModal(false);
       setEditingId(null);
-      setForm({ name: '', description: '', price: '', tags: '', imageUrl: '' });
+      setForm({ name: '', description: '', price: '', tags: '', imageUrl: '', articleType: 'physical' });
       loadArticles();
     } catch (e) {
       console.error(e);
@@ -168,13 +171,23 @@ export default function ArticlesTab({ clinicId }) {
               </div>
               <div className="grid grid-cols-2 gap-4">
                  <div>
-                   <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Precio (Opciónal)</label>
-                   <input type="number" value={form.price} onChange={e => setForm({...form, price: e.target.value})} className="w-full px-4 py-2 border rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium" />
+                   <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Tipo</label>
+                   <select value={form.articleType} onChange={e => setForm({...form, articleType: e.target.value})} className="w-full px-4 py-2.5 border rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700">
+                     <option value="physical">Producto Físico</option>
+                     <option value="service">Servicio / Cita</option>
+                     <option value="digital">Infoproducto</option>
+                     <option value="course">Curso / Módulos</option>
+                     <option value="subscription">Suscripción</option>
+                   </select>
                  </div>
                  <div>
-                   <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Etiquetas (coma)</label>
-                   <input type="text" placeholder="Ej: Zapatos, Oferta" value={form.tags} onChange={e => setForm({...form, tags: e.target.value})} className="w-full px-4 py-2 border rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium" />
+                   <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Precio</label>
+                   <input type="number" placeholder="Ej: 1500" value={form.price} onChange={e => setForm({...form, price: e.target.value})} className="w-full px-4 py-2.5 border rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium" />
                  </div>
+              </div>
+              <div>
+                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Etiquetas (coma)</label>
+                 <input type="text" placeholder="Ej: Zapatos, Oferta, Vip" value={form.tags} onChange={e => setForm({...form, tags: e.target.value})} className="w-full px-4 py-2.5 border rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">URL de Imagen</label>

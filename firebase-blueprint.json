@@ -8,6 +8,11 @@
         "ownerId": { "type": "string" },
         "name": { "type": "string", "maxLength": 100 },
         "specialty": { "type": "string", "maxLength": 100 },
+        "whatsappNumber": { "type": "string", "maxLength": 30 },
+        "contactEmail": { "type": "string", "maxLength": 100 },
+        "logoUrl": { "type": "string", "maxLength": 500 },
+        "coverUrl": { "type": "string", "maxLength": 500 },
+        "theme": { "type": "string", "maxLength": 20 },
         "plan": { "type": "string", "enum": ["TRIAL", "MONTHLY"] },
         "trialEndsAt": { "type": "number" },
         "createdAt": { "type": "number" },
@@ -46,6 +51,10 @@
         "description": { "type": "string", "maxLength": 1000 },
         "price": { "type": "number" },
         "imageUrl": { "type": "string" },
+        "articleType": {
+          "type": "string",
+          "enum": ["physical", "service", "digital", "course", "subscription"]
+        },
         "createdAt": { "type": "number" },
         "updatedAt": { "type": "number" }
       },

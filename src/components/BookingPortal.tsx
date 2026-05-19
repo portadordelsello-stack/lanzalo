@@ -16,6 +16,23 @@ export default function BookingPortal() {
   const [registering, setRegistering] = useState(false);
   const [registered, setRegistered] = useState(false);
 
+  const typeLabels: Record<string, string> = {
+    physical: '📦 Producto Físico',
+    service: '📅 Servicio / Cita',
+    digital: '💾 Infoproducto',
+    course: '🎓 Curso',
+    subscription: '⭐ Suscripción'
+  };
+
+  const handleBuy = (articleName: string) => {
+    if (!store?.whatsappNumber) {
+      alert('Esta tienda no tiene un número de WhatsApp configurado para ventas.');
+      return;
+    }
+    const text = encodeURIComponent(`Hola, me interesa: ${articleName}`);
+    window.open(`https://wa.me/${store.whatsappNumber.replace(/\D/g, '')}?text=${text}`, '_blank');
+  };
+
   useEffect(() => {
     if (clinicId) {
       loadData();
@@ -291,17 +308,22 @@ export default function BookingPortal() {
                                        $ {a.price.toLocaleString('es-AR')}
                                     </div>
                                  )}
-                                 {a.price > 0 && (
-                                    <p className="text-[13px] text-[#00a650] font-medium mb-1.5 flex items-center gap-1">Envío gratis <span className="font-extrabold italic">⚡ FULL</span></p>
+                                 {a.articleType && (
+                                    <p className="text-[12px] text-slate-500 font-medium mb-1.5 flex items-center gap-1">
+                                      {typeLabels[a.articleType] || a.articleType}
+                                    </p>
                                  )}
                                  <h4 className="text-[13px] font-normal text-slate-500 leading-snug line-clamp-2 mb-2 flex-1">{a.name}</h4>
                                  {a.tags && a.tags.length > 0 && (
-                                    <div className="flex flex-wrap gap-1 mt-auto pt-2">
+                                    <div className="flex flex-wrap gap-1 mt-auto pt-2 mb-3">
                                        {a.tags.map((t: string) => (
                                           <span key={t} className="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded text-[10px] font-medium">{t}</span>
                                        ))}
                                     </div>
                                  )}
+                                 <button onClick={(e) => { e.stopPropagation(); handleBuy(a.name); }} className="w-full mt-auto bg-[#25D366] hover:bg-[#128C7E] text-white py-2 rounded-lg font-bold text-sm tracking-wide transition-colors flex items-center justify-center gap-2">
+                                    <Phone className="w-4 h-4" /> Comprar ahora
+                                 </button>
                               </div>
                            </div>
                         ))}

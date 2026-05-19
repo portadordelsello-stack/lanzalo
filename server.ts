@@ -269,9 +269,23 @@ async function startWhatsAppBot(clinicId: string, host: string, pairingPhone?: s
             }
           };
 
+          const consultarCatalogo: FunctionDeclaration = {
+            name: "consultarCatalogo",
+            description: "Busca productos, servicios o infoproductos en el catálogo de la tienda actual. Permite opcionalmente buscar por algún término o categoría.",
+            parameters: {
+              type: Type.OBJECT,
+              properties: {
+                busqueda: {
+                  type: Type.STRING,
+                  description: "Término de búsqueda opcional. Si está vacío, devuelve los primeros elementos del catálogo."
+                }
+              }
+            }
+          };
+
           const generationConfig = {
-            systemInstruction: `Eres el agente inteligente de una marca o tienda. El nombre de la Tienda es "${clinicConfig.name}". Tus tareas son soporte, ventas y captación de clientes. Sigue estas instrucciones: ${systemPrompt}. Cuando un usuario pregunte por el catálogo, novedades o quiera suscribirse para lanzamientos, proporciónale INMEDIATAMENTE el enlace al catálogo: ${bookingUrl}\n\nSi el usuario te da su teléfono, puedes consultar si está suscripto usando la herramienta consultarSuscripcion.\n\nIMPORTANTE: Envía los links como texto crudo sin formato especial.`,
-            tools: [{ functionDeclarations: [consultarSuscripcion] }]
+            systemInstruction: `Eres el agente inteligente de una marca o tienda. El nombre de la Tienda es "${clinicConfig.name}". Tus tareas son soporte, ventas y captación de clientes. Sigue estas instrucciones: ${systemPrompt}. Cuando un usuario pregunte por el catálogo, novedades o quiera suscribirse para lanzamientos, proporciónale INMEDIATAMENTE el enlace al catálogo: ${bookingUrl}\n\nSi el usuario te da su teléfono, puedes consultar si está suscripto usando la herramienta consultarSuscripcion. Para consultar qué opciones o catálogo hay disponible, usa consultarCatalogo.\n\nIMPORTANTE: Envía los links como texto crudo sin formato especial.`,
+            tools: [{ functionDeclarations: [consultarSuscripcion, consultarCatalogo] }]
           };
 
           const historyKey = `${clinicId}:${remoteJid}`;
@@ -296,31 +310,62 @@ async function startWhatsAppBot(clinicId: string, host: string, pairingPhone?: s
 
           if (response1.functionCalls && response1.functionCalls.length > 0) {
             const call = response1.functionCalls[0];
-            if (call.name === 'consultarSuscripcion') {
-              const phoneArg = call.args.telefono;
+            if (call.name === 'consultarSuscripcion' || call.name === 'consultarCatalogo') {
               let toolResultStr = "Error al consultar la base de datos.";
               
-              if (typeof phoneArg === 'string') {
+              if (call.name === 'consultarSuscripcion') {
+                const phoneArg = call.args.telefono;
+                if (typeof phoneArg === 'string') {
+                  try {
+                    const patientsRef = getDb().collection('clinics').doc(clinicId).collection('patients');
+                    const patientSnap = await patientsRef.where('phone', '==', phoneArg).limit(1).get();
+                    
+                    if (patientSnap.empty) {
+                      toolResultStr = `Base de datos: El usuario con teléfono ${phoneArg} NO está en el sistema. Debe registrarse en el portal.`;
+                    } else {
+                      const patientData = patientSnap.docs[0].data();
+                      toolResultStr = `Base de datos: El usuario ${patientData.name || 'registrado'} YA está registrado. Etiquetas/Intereses: ${(patientData.tags || []).join(', ') || 'Ninguna'}`;
+                    }
+                  } catch (e) {
+                    console.error("Patient DB error:", e);
+                  }
+                }
+              } else if (call.name === 'consultarCatalogo') {
+                const searchTerm = (call.args.busqueda || '').toString().toLowerCase();
                 try {
-                  const patientsRef = getDb().collection('clinics').doc(clinicId).collection('patients');
-                  const patientSnap = await patientsRef.where('phone', '==', phoneArg).limit(1).get();
-                  
-                  if (patientSnap.empty) {
-                    toolResultStr = `Base de datos: El usuario con teléfono ${phoneArg} NO está en el sistema. Debe registrarse en el portal.`;
+                  const articlesRef = getDb().collection('clinics').doc(clinicId).collection('articles');
+                  const articlesSnap = await articlesRef.limit(50).get();
+                  if (!articlesSnap.empty) {
+                      let articles = articlesSnap.docs.map(doc => doc.data());
+                      if (searchTerm) {
+                          articles = articles.filter(a => {
+                              const titleMatch = (a.name || '').toLowerCase().includes(searchTerm);
+                              const tagMatch = (a.tags || []).some((t: string) => t.toLowerCase().includes(searchTerm));
+                              const descMatch = (a.description || '').toLowerCase().includes(searchTerm);
+                              const typeMatch = (a.articleType || '').toLowerCase().includes(searchTerm);
+                              return titleMatch || tagMatch || descMatch || typeMatch;
+                          });
+                      }
+                      if (articles.length === 0) {
+                          toolResultStr = `Catálogo: No hay productos que coincidan con la búsqueda "${searchTerm}".`;
+                      } else {
+                          const articleLines = articles.slice(0, 15).map(a => 
+                              `- ${a.name} (${a.articleType || 'physical'}) : $${a.price || 0} | Desc: ${a.description} | Etiquetas: ${(a.tags || []).join(', ')}`
+                          );
+                          toolResultStr = `Catálogo (resultados para "${searchTerm || 'todo'}"):\n` + articleLines.join('\n');
+                      }
                   } else {
-                    const patientData = patientSnap.docs[0].data();
-                    toolResultStr = `Base de datos: El usuario ${patientData.name || 'registrado'} YA está registrado. Etiquetas/Intereses: ${(patientData.tags || []).join(', ') || 'Ninguna'}`;
+                      toolResultStr = "El catálogo está vacío actualmente.";
                   }
                 } catch (e) {
-                  console.error("Patient DB error:", e);
-                  // Silently return error to AI without crashing response
+                  console.error("Catalog DB error:", e);
                 }
               }
 
               const previousContent = response1.candidates?.[0]?.content;
               if (previousContent) {
                 history.push(previousContent);
-                history.push({ role: 'user', parts: [{ functionResponse: { name: 'consultarSuscripcion', response: { result: toolResultStr } } }] });
+                history.push({ role: 'user', parts: [{ functionResponse: { name: call.name, response: { result: toolResultStr } } }] });
 
                 const response2 = await ai.models.generateContent({
                   model: 'gemini-2.5-flash',

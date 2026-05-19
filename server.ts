@@ -8,8 +8,8 @@ import path from 'path';
 import fs from 'fs';
 import { Boom } from '@hapi/boom';
 import pino from 'pino';
-import { initializeApp, App } from 'firebase-admin/app';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { initializeApp, FirebaseApp } from 'firebase/app';
+import { getFirestore, collection, query, where, limit, getDocs } from 'firebase/firestore';
 import { MercadoPagoConfig, Preference, PreApprovalPlan, PreApproval } from 'mercadopago';
 
 // Initialize MP Client (Lazy creation logic inside endpoints where it's used so it doesn't crash without token)
@@ -27,21 +27,19 @@ function getMPClient() {
 // Initialize Firebase (Lazy)
 const firebaseAppConfig = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'firebase-applet-config.json'), 'utf8'));
 
-let adminApp: App | null = null;
+let firebaseApp: FirebaseApp | null = null;
 let firestoreDb: any | null = null;
 
-function getFirebaseAdmin() {
-  if (!adminApp) {
-    adminApp = initializeApp({
-      projectId: firebaseAppConfig.projectId,
-    });
+function getFirebaseApp() {
+  if (!firebaseApp) {
+    firebaseApp = initializeApp(firebaseAppConfig);
   }
-  return adminApp;
+  return firebaseApp;
 }
 
 function getDb() {
   if (!firestoreDb) {
-    const app = getFirebaseAdmin();
+    const app = getFirebaseApp();
     firestoreDb = getFirestore(app, firebaseAppConfig.firestoreDatabaseId);
   }
   return firestoreDb;
@@ -238,9 +236,9 @@ async function startWhatsAppBot(clinicId: string, host: string, pairingPhone?: s
 
       const systemConfig = getSystemConfig();
       const plan = clinicConfig.plan || 'GRATIS';
-      const limit = systemConfig.limits[plan as keyof typeof systemConfig.limits] || 0;
+      const planLimit = systemConfig.limits[plan as keyof typeof systemConfig.limits] || 0;
 
-      if (clinicConfig.messagesUsed >= limit) {
+      if (clinicConfig.messagesUsed >= planLimit) {
          continue; // Reject since limit is reached
       }
 
@@ -317,8 +315,9 @@ async function startWhatsAppBot(clinicId: string, host: string, pairingPhone?: s
                 const phoneArg = call.args.telefono;
                 if (typeof phoneArg === 'string') {
                   try {
-                    const patientsRef = getDb().collection('clinics').doc(clinicId).collection('patients');
-                    const patientSnap = await patientsRef.where('phone', '==', phoneArg).limit(1).get();
+                    const patientsRef = collection(getDb(), 'clinics', clinicId, 'patients');
+                    const q = query(patientsRef, where('phone', '==', phoneArg), limit(1));
+                    const patientSnap = await getDocs(q);
                     
                     if (patientSnap.empty) {
                       toolResultStr = `Base de datos: El usuario con teléfono ${phoneArg} NO está en el sistema. Debe registrarse en el portal.`;
@@ -333,8 +332,9 @@ async function startWhatsAppBot(clinicId: string, host: string, pairingPhone?: s
               } else if (call.name === 'consultarCatalogo') {
                 const searchTerm = (call.args.busqueda || '').toString().toLowerCase();
                 try {
-                  const articlesRef = getDb().collection('clinics').doc(clinicId).collection('articles');
-                  const articlesSnap = await articlesRef.limit(50).get();
+                  const articlesRef = collection(getDb(), 'clinics', clinicId, 'articles');
+                  const q = query(articlesRef, limit(50));
+                  const articlesSnap = await getDocs(q);
                   if (!articlesSnap.empty) {
                       let articles = articlesSnap.docs.map(doc => doc.data());
                       if (searchTerm) {

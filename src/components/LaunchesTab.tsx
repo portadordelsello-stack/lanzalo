@@ -1,18 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, getDocs, addDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, getDocs, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
-import { Rocket, CheckCircle2, ArrowRight, ArrowLeft, Users, Tag, Image as ImageIcon } from 'lucide-react';
+import { Rocket, CheckCircle2, ArrowRight, ArrowLeft, Users, Tag, Image as ImageIcon, Search, Check } from 'lucide-react';
 
 export default function LaunchesTab({ clinicId }) {
   const [step, setStep] = useState(1);
-  const [articles, setArticles] = useState([]);
-  const [subscribers, setSubscribers] = useState([]);
+  const [articles, setArticles] = useState<any[]>([]);
+  const [subscribers, setSubscribers] = useState<any[]>([]);
   
-  const [selectedArticles, setSelectedArticles] = useState([]);
-  const [selectedTags, setSelectedTags] = useState([]);
+  const [selectedArticles, setSelectedArticles] = useState<string[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   
   const [launching, setLaunching] = useState(false);
   const [launchedCount, setLaunchedCount] = useState(0);
+
+  // New Audience / Manual selection state
+  const [audienceType, setAudienceType] = useState<'tags' | 'manual'>('tags');
+  const [newAudienceName, setNewAudienceName] = useState('');
+  const [selectedSubscriberIds, setSelectedSubscriberIds] = useState<string[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isCreatingAudience, setIsCreatingAudience] = useState(false);
 
   useEffect(() => {
     if (clinicId) {
@@ -33,9 +40,9 @@ export default function LaunchesTab({ clinicId }) {
     setSubscribers(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
   };
 
-  const allTags = [...new Set(subscribers.flatMap(s => s.tags || []))];
+  const allTags = [...new Set(subscribers.flatMap((s: any) => s.tags || []))];
 
-  const toggleArticle = (id) => {
+  const toggleArticle = (id: string) => {
     if (selectedArticles.includes(id)) {
       setSelectedArticles(selectedArticles.filter(a => a !== id));
     } else {
@@ -43,7 +50,7 @@ export default function LaunchesTab({ clinicId }) {
     }
   };
 
-  const toggleTag = (tag) => {
+  const toggleTag = (tag: string) => {
     if (selectedTags.includes(tag)) {
       setSelectedTags(selectedTags.filter(t => t !== tag));
     } else {
@@ -51,9 +58,74 @@ export default function LaunchesTab({ clinicId }) {
     }
   };
 
+  const toggleSubscriber = (id: string) => {
+    if (selectedSubscriberIds.includes(id)) {
+      setSelectedSubscriberIds(selectedSubscriberIds.filter(sid => sid !== id));
+    } else {
+      setSelectedSubscriberIds([...selectedSubscriberIds, id]);
+    }
+  };
+
+  const selectAllSubscribers = (visibleSubs: any[]) => {
+    const visibleIds = visibleSubs.map(s => s.id);
+    const allSelected = visibleIds.every(id => selectedSubscriberIds.includes(id));
+    if (allSelected) {
+      setSelectedSubscriberIds(selectedSubscriberIds.filter(id => !visibleIds.includes(id)));
+    } else {
+      setSelectedSubscriberIds([...new Set([...selectedSubscriberIds, ...visibleIds])]);
+    }
+  };
+
   const getFilteredSubscribers = () => {
-    if (selectedTags.length === 0) return subscribers;
-    return subscribers.filter(s => s.tags?.some(t => selectedTags.includes(t)));
+    if (audienceType === 'tags') {
+      if (selectedTags.length === 0) return subscribers;
+      return subscribers.filter((s: any) => s.tags?.some((t: string) => selectedTags.includes(t)));
+    } else {
+      return subscribers.filter((s: any) => selectedSubscriberIds.includes(s.id));
+    }
+  };
+
+  const handleSaveAndNext = async () => {
+    const subs = getFilteredSubscribers();
+    if (subs.length === 0) {
+      alert('Por favor selecciona al menos un suscriptor para tu audiencia.');
+      return;
+    }
+
+    if (audienceType === 'manual' && newAudienceName.trim()) {
+      const tagToApply = newAudienceName.trim();
+      setIsCreatingAudience(true);
+      try {
+        // Enlazar subscripciones actualizando su tag en Firestore
+        for (const subId of selectedSubscriberIds) {
+          const subObj = subscribers.find((s: any) => s.id === subId);
+          if (subObj) {
+            const currentTags = subObj.tags || [];
+            if (!currentTags.includes(tagToApply)) {
+              const updatedTags = [...currentTags, tagToApply];
+              await updateDoc(doc(db, 'clinics', clinicId, 'patients', subId), {
+                tags: updatedTags,
+                updatedAt: serverTimestamp()
+              });
+            }
+          }
+        }
+        // Refrescar suscriptores desde DB
+        await loadSubscribers();
+        
+        // Auto-seleccionar la nueva etiqueta recientemente creada
+        setSelectedTags([tagToApply]);
+        setNewAudienceName('');
+        setSelectedSubscriberIds([]);
+        setAudienceType('tags');
+      } catch (e) {
+        console.error(e);
+        alert('Error al guardar la nueva audiencia en base de datos.');
+      } finally {
+        setIsCreatingAudience(false);
+      }
+    }
+    setStep(3);
   };
 
   const startLaunch = async () => {
@@ -64,7 +136,7 @@ export default function LaunchesTab({ clinicId }) {
       
       const selectedArts = articles.filter(a => selectedArticles.includes(a.id));
       const launchMessages = subs.map(sub => {
-        const text = `¡Hola ${sub.name}! Tenemos novedades para ti en nuestro catálogo:\n\n` +
+        const text = `Hola, que tal? Hace un tiempo atras preguntaste por nuestros cursos de programacion para niños, queremos invitarte a conocer mas de nuestras ofertas educativas:\n\n` +
           selectedArts.map(a => `🔹 ${a.name}\n${a.description}\nPrecio: $${a.price || 0}`).join('\n\n') +
           `\n\n¡Escríbenos si te interesa o tienes alguna duda!`;
         return { phone: sub.phone, text };
@@ -85,7 +157,7 @@ export default function LaunchesTab({ clinicId }) {
       await addDoc(collection(db, 'clinics', clinicId, 'launches'), {
         storeOwnerId: clinicId,
         articleIds: selectedArticles,
-        audienceTags: selectedTags,
+        audienceTags: audienceType === 'tags' ? selectedTags : [newAudienceName.trim() || 'Selección Manual'],
         status: 'COMPLETED',
         sentCount: subs.length,
         createdAt: serverTimestamp(),
@@ -165,21 +237,147 @@ export default function LaunchesTab({ clinicId }) {
 
         {step === 2 && (
           <div className="animate-fade-in-up">
-            <h4 className="text-lg font-bold text-slate-900 mb-6">Paso 2: ¿A quién le quieres avisar?</h4>
+            <h4 className="text-lg font-bold text-slate-900 mb-4">Paso 2: ¿A quién le quieres avisar?</h4>
             
-            <div className="mb-6">
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Filtrar por Etiquetas de Audiencia</label>
-              <div className="flex flex-wrap gap-2">
-                <button onClick={() => setSelectedTags([])} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${selectedTags.length === 0 ? 'bg-slate-800 text-white shadow' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-                  Todos ({subscribers.length})
-                </button>
-                {allTags.map(tag => (
-                  <button key={tag} onClick={() => toggleTag(tag)} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-1 border ${selectedTags.includes(tag) ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
-                    <Tag className="w-3 h-3" /> {tag}
-                  </button>
-                ))}
-              </div>
+            {/* Audience Type Selection Tabs */}
+            <div className="flex border-b border-slate-100 mb-6 gap-6">
+              <button
+                type="button"
+                onClick={() => setAudienceType('tags')}
+                className={`pb-3 text-sm font-bold border-b-2 transition-all ${
+                  audienceType === 'tags'
+                    ? 'border-indigo-600 text-indigo-600'
+                    : 'border-transparent text-slate-400 hover:text-slate-600'
+                }`}
+              >
+                Filtrar por Etiquetas
+              </button>
+              <button
+                type="button"
+                onClick={() => setAudienceType('manual')}
+                className={`pb-3 text-sm font-bold border-b-2 transition-all ${
+                  audienceType === 'manual'
+                    ? 'border-indigo-600 text-indigo-600'
+                    : 'border-transparent text-slate-400 hover:text-slate-600'
+                }`}
+              >
+                Selección Manual (Crear Audiencia)
+              </button>
             </div>
+
+            {audienceType === 'tags' ? (
+              <div className="mb-6 animate-fade-in">
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Filtrar por Etiquetas de Audiencia</label>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={() => setSelectedTags([])} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${selectedTags.length === 0 ? 'bg-slate-800 text-white shadow' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                    Todos ({subscribers.length})
+                  </button>
+                  {allTags.map(tag => (
+                    <button key={tag} onClick={() => toggleTag(tag)} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-1 border ${selectedTags.includes(tag) ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                      <Tag className="w-3 h-3" /> {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-6 mb-6 animate-fade-in">
+                {/* Create New Audience Tag Form */}
+                <div className="bg-slate-50/50 p-5 rounded-2xl border border-slate-100 space-y-3">
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Nombre de la Nueva Audiencia (Opcional)</label>
+                  <p className="text-xs text-slate-400">Si ingresas un nombre, se guardará de forma permanente como una nueva etiqueta para los suscriptores seleccionados.</p>
+                  <input
+                    type="text"
+                    placeholder="Ej. Clientes VIP, Lanzamiento Invierno, etc."
+                    value={newAudienceName}
+                    onChange={(e) => setNewAudienceName(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  />
+                </div>
+
+                {/* Search & Manual selection list */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Seleccionar Suscriptores</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const visible = subscribers.filter(s => {
+                          const sSearch = searchTerm.toLowerCase();
+                          return s.name?.toLowerCase().includes(sSearch) || s.phone?.includes(sSearch);
+                        });
+                        selectAllSubscribers(visible);
+                      }}
+                      className="text-xs text-indigo-600 hover:text-indigo-800 font-bold transition-colors"
+                    >
+                      {subscribers.filter(s => {
+                        const sSearch = searchTerm.toLowerCase();
+                        return s.name?.toLowerCase().includes(sSearch) || s.phone?.includes(sSearch);
+                      }).every(s => selectedSubscriberIds.includes(s.id)) ? 'Deseleccionar Todos' : 'Seleccionar Todos'}
+                    </button>
+                  </div>
+                  
+                  {/* Search input */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Buscar por nombre o celular..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                  </div>
+
+                  {/* Scrollable list */}
+                  <div className="border border-slate-100 rounded-2xl overflow-y-auto max-h-72 bg-white divide-y divide-slate-50">
+                    {subscribers
+                      .filter(s => {
+                        const sSearch = searchTerm.toLowerCase();
+                        return (s.name || '').toLowerCase().includes(sSearch) || (s.phone || '').includes(sSearch);
+                      })
+                      .map((sub: any) => {
+                        const isSelected = selectedSubscriberIds.includes(sub.id);
+                        return (
+                          <div
+                            key={sub.id}
+                            onClick={() => toggleSubscriber(sub.id)}
+                            className={`flex items-center justify-between p-3.5 hover:bg-slate-50/70 transition-all cursor-pointer ${
+                              isSelected ? 'bg-indigo-50/20' : ''
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all ${
+                                isSelected ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 bg-white'
+                              }`}>
+                                {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                              </div>
+                              <div>
+                                <h5 className="text-sm font-semibold text-slate-800">{sub.name}</h5>
+                                <p className="text-xs text-slate-400 font-mono">{sub.phone}</p>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {(sub.tags || []).map((t: string) => (
+                                <span key={t} className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full font-medium">
+                                  {t}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    {subscribers.filter(s => {
+                      const sSearch = searchTerm.toLowerCase();
+                      return (s.name || '').toLowerCase().includes(sSearch) || (s.phone || '').includes(sSearch);
+                    }).length === 0 && (
+                      <div className="p-8 text-center text-slate-400 text-sm">
+                        No se encontraron suscriptores que coincidan con la búsqueda.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="p-6 bg-slate-50 border border-slate-100 rounded-2xl flex items-center gap-4">
                <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-slate-400 shadow-sm"><Users className="w-6 h-6"/></div>
@@ -193,8 +391,12 @@ export default function LaunchesTab({ clinicId }) {
                <button onClick={() => setStep(1)} className="text-slate-500 hover:text-slate-900 font-bold py-3 px-6 rounded-xl transition-all flex items-center gap-2">
                  <ArrowLeft className="w-5 h-5"/> Atrás
                </button>
-               <button onClick={() => setStep(3)} disabled={subsFiltered.length === 0} className="bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 px-8 rounded-xl transition-all shadow-md flex items-center gap-2 disabled:opacity-50">
-                 Siguiente <ArrowRight className="w-5 h-5"/>
+               <button 
+                 onClick={handleSaveAndNext} 
+                 disabled={subsFiltered.length === 0 || isCreatingAudience} 
+                 className="bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 px-8 rounded-xl transition-all shadow-md flex items-center gap-2 disabled:opacity-50"
+               >
+                 {isCreatingAudience ? 'Creando Audiencia...' : 'Siguiente'} <ArrowRight className="w-5 h-5"/>
                </button>
             </div>
           </div>

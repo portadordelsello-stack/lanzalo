@@ -51,7 +51,7 @@ export default function BookingPortal() {
       // Load articles
       const q = query(collection(db, 'clinics', clinicId!, 'articles'));
       const snapshot = await getDocs(q);
-      const parts = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      const parts = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
       setArticles(parts);
       
       // Extract unique tags from articles to let user subscribe

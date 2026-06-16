@@ -383,6 +383,10 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
   const [patientForm, setPatientForm] = useState<any>(null);
   const [patientToDelete, setPatientToDelete] = useState<string | null>(null);
   const [savingPatient, setSavingPatient] = useState(false);
+  const [isImportingCSV, setIsImportingCSV] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
+  const [totalToImport, setTotalToImport] = useState(0);
+  const [importStatus, setImportStatus] = useState<{ success: number; errors: number } | null>(null);
 
   // Appt state
   const [apptForm, setApptForm] = useState<any>(null);
@@ -534,6 +538,107 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
     }
   };
 
+  const handleDownloadSample = () => {
+    const csvContent = "\uFEFFNombre,WhatsApp\nJuan Perez,+54 9 341 0000000\nMaria Gomez,+54 9 342 0000000\n";
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "ejemplo_suscriptores.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleCSVImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const text = event.target?.result as string;
+      if (!text) return;
+
+      const lines = text.split(/\r?\n/);
+      if (lines.length === 0) return;
+
+      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+      const nameIdx = headers.findIndex(h => h.toLowerCase() === 'nombre' || h.toLowerCase() === 'name');
+      const phoneIdx = headers.findIndex(h => h.toLowerCase() === 'whatsapp' || h.toLowerCase() === 'teléfono' || h.toLowerCase() === 'telefono' || h.toLowerCase() === 'phone' || h.toLowerCase() === 'celular');
+
+      if (nameIdx === -1 || phoneIdx === -1) {
+        alert("El archivo CSV debe contener las columnas 'Nombre' y 'WhatsApp' en la primera fila.");
+        return;
+      }
+
+      const parsedPatients: { name: string; phone: string }[] = [];
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        // Custom robust CSV parser to split by comma, respecting quotes
+        const row: string[] = [];
+        let inQuotes = false;
+        let currentToken = '';
+        for (let j = 0; j < line.length; j++) {
+          const char = line[j];
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === ',' && !inQuotes) {
+            row.push(currentToken.trim());
+            currentToken = '';
+          } else {
+            currentToken += char;
+          }
+        }
+        row.push(currentToken.trim());
+
+        const name = row[nameIdx]?.replace(/^"|"$/g, '').trim();
+        const phone = row[phoneIdx]?.replace(/^"|"$/g, '').trim();
+
+        if (name && phone) {
+          parsedPatients.push({ name, phone });
+        }
+      }
+
+      if (parsedPatients.length === 0) {
+        alert("No se encontraron registros válidos para importar.");
+        return;
+      }
+
+      setIsImportingCSV(true);
+      setTotalToImport(parsedPatients.length);
+      setImportProgress(0);
+
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (let i = 0; i < parsedPatients.length; i++) {
+        const p = parsedPatients[i];
+        try {
+          await addDoc(collection(db, 'clinics', user.uid, 'patients'), {
+            clinicOwnerId: user.uid,
+            name: p.name,
+            phone: p.phone,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          });
+          successCount++;
+        } catch (err) {
+          console.error("Error importing row:", p, err);
+          errorCount++;
+        }
+        setImportProgress(i + 1);
+      }
+
+      setIsImportingCSV(false);
+      setImportStatus({ success: successCount, errors: errorCount });
+      e.target.value = ''; // Reset file input
+    };
+
+    reader.readAsText(file);
+  };
+
   const handleSavePatient = async (e: React.FormEvent) => {
      e.preventDefault();
      if (!patientForm) return;
@@ -543,22 +648,14 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
        if (patientForm.id) {
            await updateDoc(doc(db, 'clinics', user.uid, 'patients', patientForm.id), {
                name: patientForm.name || '',
-               tags: patientForm.tags || [],
                phone: fullPhone,
-               email: patientForm.email || '',
-               address: patientForm.address || '',
-               
                updatedAt: serverTimestamp()
            });
        } else {
            await addDoc(collection(db, 'clinics', user.uid, 'patients'), {
                clinicOwnerId: user.uid,
                name: patientForm.name || '',
-               tags: patientForm.tags || [],
                phone: fullPhone,
-               email: patientForm.email || '',
-               address: patientForm.address || '',
-               
                createdAt: serverTimestamp(),
                updatedAt: serverTimestamp()
            });
@@ -1179,20 +1276,36 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
           {activeTab === 'suscriptores' && (
             <div className="max-w-6xl mx-auto">
                <div className="bg-white border border-slate-100 rounded-[2rem] shadow-xl shadow-slate-200/40 overflow-hidden">
-                  <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+                  <div className="p-6 border-b border-slate-100 bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                      <div>
                         <h3 className="font-bold text-slate-900">Listado de Suscriptores</h3>
                         <p className="text-sm text-slate-500">Consulta y gestiona la información de tus clientes y suscriptores.</p>
                      </div>
-                     <div className="flex gap-2">
+                     <div className="flex flex-wrap gap-2">
+                        <input
+                          type="file"
+                          id="csv-file-input"
+                          accept=".csv"
+                          className="hidden"
+                          onChange={handleCSVImport}
+                        />
                         <button 
                            onClick={() => handleOpenPatientModal()}
                            className="px-4 py-2 bg-sky-600 text-white rounded-lg text-sm font-medium hover:bg-sky-700 transition-colors"
                         >
                            + Nuevo Suscriptor
                         </button>
-                        <button className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors">
-                           Exportar Datos
+                        <button 
+                           onClick={() => document.getElementById('csv-file-input')?.click()}
+                           className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"
+                        >
+                           Importar Datos (CSV)
+                        </button>
+                        <button 
+                           onClick={handleDownloadSample}
+                           className="px-4 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors"
+                        >
+                           Archivo de Ejemplo
                         </button>
                      </div>
                   </div>
@@ -1201,11 +1314,8 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                         <thead>
                            <tr className="bg-slate-50/50 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                               <th className="px-6 py-4 border-b border-slate-100">Nombre</th>
-                              <th className="px-6 py-4 border-b border-slate-100">Etiquetas</th>
                               <th className="px-6 py-4 border-b border-slate-100">WhatsApp</th>
-                              <th className="px-6 py-4 border-b border-slate-100">Email</th>
-                              
-                              <th className="px-6 py-4 border-b border-slate-100">Acciones</th>
+                              <th className="px-6 py-4 border-b border-slate-100 text-right">Acciones</th>
                            </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -1219,17 +1329,9 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                                        <span className="font-medium text-slate-900">{p.name || 'Sin Nombre'}</span>
                                     </div>
                                  </td>
-                                 <td className="px-6 py-4 text-sm text-slate-600">
-  <div className="flex flex-wrap gap-1">
-     {p.tags?.map((t: string) => (
-        <span key={t} className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">{t}</span>
-     ))}
-  </div>
-</td>
                                  <td className="px-6 py-4 text-sm text-slate-600">{p.phone}</td>
-                                 <td className="px-6 py-4 text-sm text-slate-600">{p.email || '-'}</td>
                                  
-                                 <td className="px-6 py-4 flex items-center gap-3">
+                                 <td className="px-6 py-4 flex items-center justify-end gap-3">
                                     <button onClick={() => handleOpenPatientModal(p)} className="text-slate-400 hover:text-indigo-600" title="Editar">
                                       <Settings className="w-4 h-4" />
                                     </button>
@@ -1241,7 +1343,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                            ))}
                            {patients.length === 0 && (
                               <tr>
-                                 <td colSpan={5} className="px-6 py-12 text-center">
+                                 <td colSpan={3} className="px-6 py-12 text-center">
                                     <div className="max-w-xs mx-auto">
                                        <UserIcon className="w-12 h-12 text-slate-200 mx-auto mb-4" />
                                        <p className="text-slate-900 font-bold mb-1">No hay suscriptores registrados</p>
@@ -1254,6 +1356,61 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                      </table>
                   </div>
                </div>
+
+               {/* CSV Import Progress Modal */}
+               {isImportingCSV && (
+                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
+                   <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center border border-slate-100 animate-in zoom-in duration-200">
+                     <div className="w-16 h-16 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-4">
+                       <svg className="animate-spin h-8 w-8 text-indigo-600" fill="none" viewBox="0 0 24 24">
+                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                       </svg>
+                     </div>
+                     <h3 className="text-lg font-bold text-slate-950 mb-1">Importando Suscriptores</h3>
+                     <p className="text-slate-500 text-sm mb-4">
+                       Procesando {importProgress} de {totalToImport}
+                     </p>
+                     <div className="w-full bg-slate-100 rounded-full h-2 shadow-inner overflow-hidden">
+                       <div 
+                         className="bg-indigo-600 h-2 rounded-full transition-all duration-300" 
+                         style={{ width: `${(importProgress / totalToImport) * 100}%` }}
+                       ></div>
+                     </div>
+                   </div>
+                 </div>
+               )}
+
+               {/* CSV Import Success/Summary Modal */}
+               {importStatus && (
+                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
+                   <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center border border-slate-100 animate-in zoom-in duration-200">
+                     <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-4 text-2xl font-bold font-sans">✓</div>
+                     <h3 className="text-lg font-bold text-slate-950 mb-1">Importación Finalizada</h3>
+                     <p className="text-slate-500 text-sm mb-6">
+                       El proceso de importación masiva de contactos ha terminado.
+                     </p>
+                     
+                     <div className="grid grid-cols-2 gap-3 mb-6">
+                       <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100/50 text-center">
+                         <div className="text-3xl font-black text-emerald-600">{importStatus.success}</div>
+                         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1">Exitosos</div>
+                       </div>
+                       <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-center">
+                         <div className="text-3xl font-black text-rose-500">{importStatus.errors}</div>
+                         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1">Errores</div>
+                       </div>
+                     </div>
+                     
+                     <button
+                       onClick={() => setImportStatus(null)}
+                       className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-semibold transition-colors shadow-lg shadow-slate-900/10"
+                     >
+                       Entendido
+                     </button>
+                   </div>
+                 </div>
+               )}
             </div>
           )}
 
@@ -1273,18 +1430,9 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                       <label className="block text-sm font-semibold text-slate-700 mb-1.5">Nombre</label>
                       <input 
                         type="text"
+                        required
                         value={patientForm.name}
                         onChange={e => setPatientForm({...patientForm, name: e.target.value})}
-                        className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Etiquetas (separadas por coma)</label>
-                      <input 
-                        type="text"
-                        placeholder="Ej: Ofertas, Verano, Vip"
-                        value={patientForm.tags ? patientForm.tags.join(', ') : ''}
-                        onChange={e => setPatientForm({...patientForm, tags: e.target.value.split(',').map(tag => tag.trim()).filter(tag => tag)})}
                         className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
                       />
                     </div>
@@ -1312,25 +1460,6 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                         />
                       </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Email</label>
-                      <input 
-                        type="email"
-                        value={patientForm.email}
-                        onChange={e => setPatientForm({...patientForm, email: e.target.value})}
-                        className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Dirección</label>
-                      <input 
-                        type="text"
-                        value={patientForm.address}
-                        onChange={e => setPatientForm({...patientForm, address: e.target.value})}
-                        className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
-                      />
-                    </div>
-
                   </div>
                   <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">
                     <button 
